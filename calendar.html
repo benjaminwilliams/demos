@@ -40,6 +40,7 @@
                         &.today { background:#E3F2FF; }
                         &.different-month { color:#C0C0C0; }
                         &.selected { background:@secondary-colour; color:white; }
+                        &.has-event { background:#9E1919; color:white; }
                     }
                     &.names>span { color:@secondary-colour; font-weight:bold; }
                 }
@@ -56,6 +57,17 @@
 
             app.controller("calendarDemo", function($scope) {
                 $scope.day = moment();
+                $scope.events = [
+                    {
+                        "date" : "2015-10-01",
+                        "id" : 1
+                    },
+                    {
+                        "date" : "2015-10-03",
+                        "id" : 2
+                    }
+
+                ];
             });
 
             app.directive("calendar", function() {
@@ -63,17 +75,30 @@
                     restrict: "E",
                     templateUrl: "templates/calendar.html",
                     scope: {
-                        selected: "="
+                        selected: "=",
+                        events: "=",
+                        selectEvent: "&"
                     },
                     link: function(scope) {
                         scope.selected = _removeTime(scope.selected || moment());
                         scope.month = scope.selected.clone();
+                        scope.events = scope.events || {};
 
-                        var start = scope.selected.clone();
-                        start.date(1);
-                        _removeTime(start.day(0));
+                        // delay init until events have been populated
+                        function init(){
+                            var start = scope.selected.clone();
+                            start.date(1);
+                            _removeTime(start.day(0));
+                            _buildMonth(scope, start, scope.month, scope.events);
+                        }
 
-                        _buildMonth(scope, start, scope.month);
+                        //Watch for changes on scope.events
+                        scope.$watch(function(){return scope.events;}, function(){
+                            if(scope.events.length){ // only start directive if events promise has been returned
+                                init();
+                            }
+                        });
+
 
                         scope.select = function(day) {
                             scope.selected = day.date;  
@@ -83,14 +108,14 @@
                             var next = scope.month.clone();
                             _removeTime(next.month(next.month()+1).date(1));
                             scope.month.month(scope.month.month()+1);
-                            _buildMonth(scope, next, scope.month);
+                            _buildMonth(scope, next, scope.month, scope.events);
                         };
 
                         scope.previous = function() {
                             var previous = scope.month.clone();
                             _removeTime(previous.month(previous.month()-1).date(1));
                             scope.month.month(scope.month.month()-1);
-                            _buildMonth(scope, previous, scope.month);
+                            _buildMonth(scope, previous, scope.month, scope.events);
                         };
                     }
                 };
@@ -99,25 +124,48 @@
                     return date.day(0).hour(0).minute(0).second(0).millisecond(0);
                 }
 
-                function _buildMonth(scope, start, month) {
+                function _buildMonth(scope, start, month, events) {
                     scope.weeks = [];
-                    var done = false, date = start.clone(), monthIndex = date.month(), count = 0;
+                    var done = false;
+                    var date = start.clone();
+                    var monthIndex = date.month();
+                    var count = 0;
+
                     while (!done) {
-                        scope.weeks.push({ days: _buildWeek(date.clone(), month) });
+                        scope.weeks.push({ days: _buildWeek(date.clone(), month, events) });
                         date.add(1, "w");
                         done = count++ > 2 && monthIndex !== date.month();
                         monthIndex = date.month();
                     }
                 }
 
-                function _buildWeek(date, month) {
+                function _buildWeek(date, month, events) {
                     var days = [];
+
+
+                    function getEventId(){
+                        var id = [];
+                        // loop through  each event and compare date
+                        angular.forEach(events, function(value, key){
+                            console.log('value: ' + value.date);
+                            var output = value.date;
+                            var thisDate = moment(output).format('YY-MM-DD');
+                            if(date.format('YY-MM-DD') === thisDate){
+                                // add id to element if there is a matching date
+                                id.push(value.id);
+                            }
+                        });
+                        return id.length ? id.join(',') : false;
+                    }
+
+
                     for (var i = 0; i < 7; i++) {
                         days.push({
                             name: date.format("dd").substring(0, 1),
                             number: date.date(),
                             isCurrentMonth: date.month() === month.month(),
                             isToday: date.isSame(new Date(), "day"),
+                            eventId: getEventId(),
                             date: date
                         });
                         date = date.clone();
@@ -133,7 +181,7 @@
 		<span>This page demonstrates the use of a calendar control built in Angular JS. It allows the user to choose a date.</span>
 		<span>The calendar itself is an Angular JS directive, and I'm using LESS CSS for some of the more complicated CSS rules. I'm also make use of Moment.js, a library that allows for easier manipulation of time than the standard JavaScript libraries. I highly recommend you check them out.</span>
 		
-        <calendar selected="day"></calendar>
+        <calendar selected="day" events="events"></calendar>
         
 		<span>Selected date: <b>{{day.format('dddd, MMMM Do YYYY')}}</b></label>
 	</body>
